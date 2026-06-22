@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Agriculture Dashboard - IoT Project</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Paho MQTT WebSockets Client -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+  <!-- NAVIGATION HEADER -->
+  <header class="glass sticky top-0 z-50 border-b border-slate-200/80 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="bg-emerald-600 text-white p-2.5 rounded-2xl shadow-lg shadow-emerald-600/20">
+        <i class="fa-solid fa-seedling text-xl"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 tracking-tight">Hệ Thống Tưới Tự Động</h1>
+        <p class="text-xs text-slate-500 font-medium">IoT Private Cloud Agriculture Node</p>
+      </div>
+    </div>
+
+    <!-- TRẠNG THÁI KẾT NỐI MẠNG CLOUD -->
+    <div class="flex items-center gap-3">
+      <!-- Nút bật quyền thông báo trình duyệt -->
+      <button id="btnNotification" onclick="requestNotificationPermission()" 
+              class="hidden flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold px-4 py-2 rounded-2xl border border-slate-200 transition">
+        <i class="fa-solid fa-bell"></i> Cho phép thông báo
+      </button>
+
+      <div id="connectionStatus" class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 font-semibold text-sm transition-all duration-300">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+        </span>
+        <span id="statusText">Đang Kết Nối Cloud...</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+    <!-- CẤU HÌNH PRIVATE CLUSTER CHUYÊN NGHIỆP -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+      <div>
+        <h2 class="text-md font-bold text-slate-900 mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-cloud text-emerald-600"></i> Cấu Hình Kết Nối Private HiveMQ Cloud
+        </h2>
+        <p class="text-xs text-slate-400 font-medium">Nhập thông tin kết nối từ cụm máy chủ bảo mật của bạn.</p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">Host URL (Không kèm port):</label>
+          <input type="text" id="brokerHost" value="8cb404582bd44c2f83c0d4af0fa763d2.s1.eu.hivemq.cloud" 
+                 class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-sm font-semibold text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">WebSocket Port (Mặc định 8884):</label>
+          <input type="number" id="brokerPort" value="8884" 
+                 class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-sm font-semibold text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">Username (Từ Access Management):</label>
+          <input type="text" id="brokerUser" value="esp32" 
+                 class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-sm font-semibold text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="space-y-1.5 flex flex-col justify-between">
+          <label class="text-xs font-bold text-slate-500">Password:</label>
+          <div class="flex gap-2">
+            <input type="password" id="brokerPass" value="Byngo26092004" 
+                   class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-sm font-semibold text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <button onclick="reconnectWithCredentials()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-5 rounded-2xl shadow-md shadow-emerald-600/10 transition">
+              Kết Nối
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">Mã Đồ Án / ID Duy Nhất:</label>
+          <input type="text" id="userInputId" value="tungbaotung" 
+                 class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-sm font-bold text-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div class="flex items-end">
+          <p class="text-[11px] text-slate-400 font-medium leading-relaxed">
+            * <strong class="text-emerald-600">Chú ý:</strong> Private HiveMQ Cloud bắt buộc truyền thông tin mã hóa WebSockets qua cổng <strong class="text-slate-800">8884</strong> cùng chứng chỉ SSL bảo mật. Các thông tin cấu hình thực tế đã được nạp sẵn.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- KHU VỰC CẤU HÌNH CẢNH BÁO TELEGRAM (ĐÁP ỨNG TIÊU CHUẨN 3C) -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-md font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-brands fa-telegram text-sky-500 text-lg"></i> Cấu Hình Cảnh Báo Telegram (Telegram Bot Notification)
+          </h2>
+          <p class="text-xs text-slate-400 font-medium">Hệ thống sẽ gửi tin nhắn khẩn cấp thẳng về điện thoại của bạn khi đất bị khô quá ngưỡng cho phép.</p>
+        </div>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="telegramAlertToggle" class="sr-only peer">
+          <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
+          <span class="ml-2.5 text-xs font-bold text-slate-600">Kích hoạt cảnh báo</span>
+        </label>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">Bot Token:</label>
+          <input type="text" id="telegramBotToken" placeholder="Ví dụ: 123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ" 
+                 class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-xs font-mono text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+        </div>
+        <div class="space-y-1.5">
+          <label class="text-xs font-bold text-slate-500">Chat ID:</label>
+          <div class="flex gap-2">
+            <input type="text" id="telegramChatId" placeholder="Ví dụ: 987654321" 
+                   class="w-full bg-slate-50 border border-slate-200/80 px-4 py-2.5 text-xs font-mono text-slate-700 rounded-2xl focus:outline-none focus:ring-2 focus:ring-sky-500">
+            <button onclick="sendTestTelegramMessage()" class="bg-sky-500 hover:bg-sky-600 text-white font-bold text-xs px-5 rounded-2xl shadow-md shadow-sky-500/10 transition">
+              Test thử
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KHU VỰC THÔNG SỐ ĐO THỜI GIAN THỰC -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- CARD 1: NHIỆT ĐỘ KHÔNG KHÍ -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+        <div class="absolute -right-4 -bottom-4 text-orange-500/5 text-8xl group-hover:scale-110 transition-transform">
+          <i class="fa-solid fa-temperature-high"></i>
+        </div>
+        <div class="flex justify-between items-start">
+          <span class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Nhiệt Độ Không Khí</span>
+          <div class="bg-orange-50 text-orange-600 p-2.5 rounded-2xl">
+            <i class="fa-solid fa-temperature-half text-lg"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline gap-1">
+          <span id="tempVal" class="text-4xl font-extrabold text-slate-900">--.-</span>
+          <span class="text-xl font-bold text-slate-400">°C</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-3 font-medium">Cảm biến DHT11 ngoài vườn</p>
+      </div>
+
+      <!-- CARD 2: ĐỘ ẨM KHÔNG KHÍ -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+        <div class="absolute -right-4 -bottom-4 text-sky-500/5 text-8xl group-hover:scale-110 transition-transform">
+          <i class="fa-solid fa-droplet"></i>
+        </div>
+        <div class="flex justify-between items-start">
+          <span class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Độ Ẩm Không Khí</span>
+          <div class="bg-sky-50 text-sky-600 p-2.5 rounded-2xl">
+            <i class="fa-solid fa-cloud-rain text-lg"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline gap-1">
+          <span id="humVal" class="text-4xl font-extrabold text-slate-900">--.-</span>
+          <span class="text-xl font-bold text-slate-400">%</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-3 font-medium">Đo ẩm tương đối tầng khí quyển</p>
+      </div>
+
+      <!-- CARD 3: ĐỘ ẨM ĐẤT -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+        <div class="absolute -right-4 -bottom-4 text-emerald-500/5 text-8xl group-hover:scale-110 transition-transform">
+          <i class="fa-solid fa-faucet-drip"></i>
+        </div>
+        <div class="flex justify-between items-start">
+          <span class="text-sm font-semibold text-slate-500 uppercase tracking-wider">Độ Ẩm Đất Thực Tế</span>
+          <div class="bg-emerald-50 text-emerald-600 p-2.5 rounded-2xl">
+            <i class="fa-solid fa-water text-lg"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline gap-1">
+          <span id="soilVal" class="text-4xl font-extrabold text-slate-900">--.-</span>
+          <span class="text-xl font-bold text-slate-400">%</span>
+        </div>
+        <p id="soilStatusLabel" class="text-xs text-slate-400 mt-3 font-medium">Độ ẩm đất hiện tại</p>
+      </div>
+    </div>
+
+    <!-- KHU VỰC BẢNG ĐIỀU KHIỂN & AUTOMATION -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- PHÂN KHU: ĐIỀU KHIỂN CHẾ ĐỘ VÀ THIẾT BỊ -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col justify-between space-y-6">
+        <div>
+          <h2 class="text-md font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-emerald-600"></i> Bảng Điều Khiển Hệ Thống
+          </h2>
+          <p class="text-xs text-slate-400 font-medium">Thiết lập trạng thái hoạt động của bơm và tự động hóa.</p>
+        </div>
+
+        <!-- MODE SELECTOR (AUTO / MANUAL) -->
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+          <div class="flex justify-between items-center">
+            <span class="text-sm font-bold text-slate-800">Chế Độ Tưới Cây</span>
+            <span id="modeBadge" class="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 uppercase">Tự Động</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button id="btnAutoMode" onclick="setSystemMode('MODE_AUTO')" 
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-xl transition duration-150 shadow-md shadow-emerald-600/10">
+              <i class="fa-solid fa-robot mr-1.5"></i> Tự Động (Auto)
+            </button>
+            <button id="btnManualMode" onclick="setSystemMode('MODE_MANUAL')" 
+                    class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold py-2.5 rounded-xl transition duration-150">
+              <i class="fa-solid fa-hand mr-1.5"></i> Thủ Công (Manual)
+            </button>
+          </div>
+        </div>
+
+        <!-- PUMP ACTUATOR TRIGGER -->
+        <div class="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-4">
+          <div class="flex justify-between items-center">
+            <div class="flex items-center gap-2.5">
+              <div id="pumpIconContainer" class="bg-slate-200 text-slate-600 p-2 rounded-xl transition-all">
+                <i id="pumpIcon" class="fa-solid fa-faucet-drip"></i>
+              </div>
+              <div>
+                <span class="text-sm font-bold text-slate-800 block">Kích Hoạt Động Cơ</span>
+                <span id="pumpStatusText" class="text-xs text-slate-400 font-semibold block">Đang tắt</span>
+              </div>
+            </div>
+            <!-- Toggle Switch -->
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="pumpToggle" onchange="togglePump(this)" class="sr-only peer" disabled>
+              <div class="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+            </label>
+          </div>
+          <p id="modeWarnText" class="text-[11px] text-amber-600 font-medium leading-relaxed">
+            * Hệ thống đang ở chế độ Tự Động. Để điều khiển máy bơm thủ công, vui lòng chuyển sang chế độ Thủ Công trước.
+          </p>
+        </div>
+      </div>
+
+      <!-- PHÂN KHU: ĐỒ THỊ TELEMETRY REALTIME -->
+      <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm lg:col-span-2 space-y-4">
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="text-md font-bold text-slate-900 mb-1 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-emerald-600"></i> Đồ Thị Phân Tích Lịch Sử
+            </h2>
+            <p class="text-xs text-slate-400 font-medium">Theo dõi dữ liệu telemetry chu kỳ thực tế.</p>
+          </div>
+          <span class="text-xs bg-slate-100 text-slate-500 px-3 py-1.5 rounded-xl border border-slate-200/50 font-semibold">
+            Thời gian thực (Real-time)
+          </span>
+        </div>
+        <div class="h-60">
+          <canvas id="telemetryChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- KHU VỰC LOG HOẠT ĐỘNG HỆ THỐNG -->
+    <div class="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-md font-bold text-slate-900 mb-1 flex items-center gap-2">
+            <i class="fa-solid fa-terminal text-emerald-600"></i> Nhật Ký Hoạt Động Hệ Thống (System Logs)
+          </h2>
+          <p class="text-xs text-slate-400 font-medium">Báo cáo kiểm thử luồng truyền thông thời gian thực.</p>
+        </div>
+        <button onclick="clearSystemLogs()" class="text-xs text-slate-500 hover:text-emerald-600 font-semibold flex items-center gap-1.5">
+          <i class="fa-solid fa-trash-can"></i> Xóa Nhật Ký
+        </button>
+      </div>
+      <div id="logConsole" class="bg-slate-900 rounded-2xl p-4 h-48 overflow-y-auto text-xs font-mono text-emerald-400 space-y-1.5 shadow-inner">
+        <div>[SYSTEM] Khởi chạy trang giám sát... Vui lòng nhấn nút "Kết Nối" ở phía trên để bắt đầu truyền nhận bảo mật MQTTS.</div>
+      </div>
+    </div>
+  </main>
+
+  <!-- JAVASCRIPT ĐIỀU KHIỂN & KẾT NỐI CLOUD -->
+  <script>
+    let mqttClient;
+    let chart;
+    let topicSensors = "";
+    let topicControl = "";
+    let lastAlertTime = 0; // Thời gian phát cảnh báo gần nhất để tránh spam tin nhắn
+    const alertCooldown = 60000; // Nghỉ 1 phút giữa các lần gửi cảnh báo liên tiếp
+
+    // Khởi tạo đồ thị Chart.js
+    function initChart() {
+      const ctx = document.getElementById('telemetryChart').getContext('2d');
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Nhiệt độ (°C)',
+              borderColor: '#f97316',
+              backgroundColor: 'rgba(249, 115, 22, 0.05)',
+              data: [],
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Độ ẩm không khí (%)',
+              borderColor: '#0ea5e9',
+              backgroundColor: 'rgba(14, 165, 233, 0.05)',
+              data: [],
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true
+            },
+            {
+              label: 'Độ ẩm đất (%)',
+              borderColor: '#10b981',
+              backgroundColor: 'rgba(16, 185, 129, 0.05)',
+              data: [],
+              borderWidth: 2,
+              tension: 0.3,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                font: { family: 'Plus Jakarta Sans', size: 11, weight: '600' },
+                boxWidth: 12
+              }
+            }
+          },
+          scales: {
+            y: {
+              min: 0,
+              max: 100,
+              grid: { color: '#f1f5f9' },
+              ticks: { font: { family: 'Plus Jakarta Sans', size: 10 } }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { family: 'Plus Jakarta Sans', size: 10 } }
+            }
+          }
+        }
+      });
+    }
+
+    // Yêu cầu quyền thông báo của Trình duyệt
+    function requestNotificationPermission() {
+      if (!("Notification" in window)) {
+        writeLog("Trình duyệt này không hỗ trợ Thông báo Đẩy!", "warn");
+        return;
+      }
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          writeLog("Quyền thông báo trình duyệt đã được cấp phép thành công!", "success");
+          document.getElementById('btnNotification').classList.add('hidden');
+        } else {
+          writeLog("Quyền thông báo trình duyệt bị từ chối.", "warn");
+        }
+      });
+    }
+
+    function checkNotificationPermissionOnLoad() {
+      if ("Notification" in window) {
+        if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+          document.getElementById('btnNotification').classList.remove('hidden');
+        }
+      }
+    }
+
+    // Gửi thông báo cục bộ qua Trình duyệt
+    function sendBrowserNotification(title, body) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(title, {
+          body: body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/188/188333.png'
+        });
+      }
+    }
+
+    // Gửi tin nhắn khẩn cấp qua Telegram Bot API (Đảm bảo an toàn, không block ESP32)
+    function sendTelegramAlert(message) {
+      const isEnabled = document.getElementById('telegramAlertToggle').checked;
+      const botToken = document.getElementById('telegramBotToken').value.trim();
+      const chatId = document.getElementById('telegramChatId').value.trim();
+
+      if (!isEnabled || !botToken || !chatId) return;
+
+      const now = Date.now();
+      if (now - lastAlertTime < alertCooldown) {
+        writeLog("Bỏ qua gửi tin nhắn Telegram để tránh Spam (Cooldown đang chạy)...");
+        return;
+      }
+
+      const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+      const payload = {
+        chat_id: chatId,
+        text: message,
+        parse_mode: "HTML"
+      };
+
+      writeLog(`Đang gửi tin nhắn khẩn cấp qua Telegram...`);
+
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(res => {
+        if (res.ok) {
+          writeLog("Gửi cảnh báo Telegram thành công!", "success");
+          lastAlertTime = now;
+        } else {
+          writeLog(`Gửi Telegram lỗi: ${res.description}`, "error");
+        }
+      })
+      .catch(err => {
+        writeLog(`Lỗi kết nối API Telegram: ${err.message}`, "error");
+      });
+    }
+
+    function sendTestTelegramMessage() {
+      const botToken = document.getElementById('telegramBotToken').value.trim();
+      const chatId = document.getElementById('telegramChatId').value.trim();
+      if (!botToken || !chatId) {
+        writeLog("Vui lòng điền đủ Bot Token và Chat ID để chạy thử!", "warn");
+        return;
+      }
+      const testMsg = "⚠️ <b>HỆ THỐNG IoT TƯỚI CÂY</b>\nĐây là tin nhắn kiểm tra đường truyền truyền thông!";
+      // Bypass cooldown khi nhấn thủ công
+      lastAlertTime = 0; 
+      sendTelegramAlert(testMsg);
+    }
+
+    // In nhật ký lên màn hình Console
+    function writeLog(message, type = "info") {
+      const consoleEl = document.getElementById('logConsole');
+      const time = new Date().toLocaleTimeString();
+      let colorClass = "text-emerald-400";
+      if (type === "error") colorClass = "text-rose-400";
+      if (type === "warn") colorClass = "text-amber-400";
+      if (type === "success") colorClass = "text-emerald-300 font-semibold";
+
+      consoleEl.innerHTML += `<div class="${colorClass}">[${time}] ${message}</div>`;
+      consoleEl.scrollTop = consoleEl.scrollHeight; 
+    }
+
+    function clearSystemLogs() {
+      document.getElementById('logConsole').innerHTML = `<div>[SYSTEM] Đã xóa toàn bộ nhật ký.</div>`;
+    }
+
+    // Kết nối đến Cloud MQTT Broker thông qua WebSockets
+    function connectMQTT() {
+      const brokerHost = document.getElementById('brokerHost').value.trim();
+      const brokerPort = parseInt(document.getElementById('brokerPort').value.trim());
+      const brokerUser = document.getElementById('brokerUser').value.trim();
+      const brokerPass = document.getElementById('brokerPass').value.trim();
+      const userUniqueId = document.getElementById('userInputId').value.trim();
+
+      if (!brokerHost || !brokerPort) {
+        writeLog("Vui lòng nhập Host URL và Port!", "error");
+        return;
+      }
+      if (!brokerUser || !brokerPass) {
+        writeLog("Yêu cầu nhập Username/Password của HiveMQ Cloud để xác thực bảo mật!", "warn");
+        return;
+      }
+      if (!userUniqueId) {
+        writeLog("Vui lòng nhập Mã Đồ Án / ID Duy Nhất!", "error");
+        return;
+      }
+
+      // Thiết lập Topic
+      topicSensors = `iot/agri/${userUniqueId}/sensors`;
+      topicControl = `iot/agri/${userUniqueId}/control`;
+
+      // Cập nhật trạng thái UI
+      const connStatusEl = document.getElementById('connectionStatus');
+      const statusTextEl = document.getElementById('statusText');
+      connStatusEl.className = "flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 font-semibold text-sm transition-all duration-300";
+      statusTextEl.innerText = "Đang Kết Nối Cloud...";
+
+      // Khởi tạo Client MQTT
+      const randomClientId = "web-client-" + Math.floor(Math.random() * 100000);
+      mqttClient = new Paho.MQTT.Client(brokerHost, brokerPort, randomClientId);
+
+      mqttClient.onConnectionLost = onConnectionLost;
+      mqttClient.onMessageArrived = onMessageArrived;
+
+      writeLog(`Đang kết nối bảo mật tới MQTTS Broker: ${brokerHost}:${brokerPort}...`);
+      
+      const connectOptions = {
+        onSuccess: onConnectSuccess,
+        onFailure: onConnectFailure,
+        useSSL: true, // BẮT BUỘC BẬT SSL LÊN CHO CLUSTER RIÊNG CỦA BẠN
+        userName: brokerUser,
+        password: brokerPass,
+        keepAliveInterval: 45
+      };
+
+      mqttClient.connect(connectOptions);
+    }
+
+    function onConnectSuccess() {
+      writeLog("Kết nối bảo mật MQTTS thành công!", "success");
+      const connStatusEl = document.getElementById('connectionStatus');
+      const statusTextEl = document.getElementById('statusText');
+      connStatusEl.className = "flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold text-sm transition-all duration-300";
+      statusTextEl.innerText = "Cloud Connected";
+
+      // Đăng ký nhận gói dữ liệu cảm biến
+      mqttClient.subscribe(topicSensors);
+      writeLog(`Đã subscribe thành công vào topic: ${topicSensors}`);
+    }
+
+    function onConnectFailure(err) {
+      writeLog(`Kết nối bảo mật thất bại: ${err.errorMessage}. Vui lòng kiểm tra lại tài khoản đăng nhập Cluster!`, "error");
+      const connStatusEl = document.getElementById('connectionStatus');
+      const statusTextEl = document.getElementById('statusText');
+      connStatusEl.className = "flex items-center gap-2 px-4 py-2 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold text-sm transition-all duration-300";
+      statusTextEl.innerText = "Kết Nối Lỗi";
+    }
+
+    function onConnectionLost(responseObject) {
+      if (responseObject.errorCode !== 0) {
+        writeLog(`Mất kết nối Cloud: ${responseObject.errorMessage}`, "error");
+        const connStatusEl = document.getElementById('connectionStatus');
+        const statusTextEl = document.getElementById('statusText');
+        connStatusEl.className = "flex items-center gap-2 px-4 py-2 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold text-sm transition-all duration-300";
+        statusTextEl.innerText = "Mất Kết Nối";
+      }
+    }
+
+    function onMessageArrived(message) {
+      const payload = message.payloadString;
+      
+      try {
+        const data = JSON.parse(payload);
+        writeLog(`Đã nhận dữ liệu từ ESP32: ${payload}`);
+
+        document.getElementById('tempVal').innerText = data.temp !== undefined ? data.temp.toFixed(1) : "--.-";
+        document.getElementById('humVal').innerText = data.hum !== undefined ? data.hum.toFixed(1) : "--.-";
+        document.getElementById('soilVal').innerText = data.soil !== undefined ? data.soil.toFixed(1) : "--.-";
+
+        // Xử lý Cảnh báo khi đất khô (Độ ẩm dưới 35%)
+        const labelSoil = document.getElementById('soilStatusLabel');
+        if (data.soil < 35.0) {
+          labelSoil.innerHTML = `<span class="text-rose-600 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> Đất cực kỳ khô! Cần tưới ngay.</span>`;
+          
+          // Phát cảnh báo đa kênh
+          const alertBody = `Độ ẩm đất tụt sâu còn ${data.soil}%! Đang phát tín hiệu vận hành máy bơm.`;
+          sendBrowserNotification("🚨 CẢNH BÁO ĐẤT KHÔ", alertBody);
+          
+          const telegramMsg = `🚨 <b>CẢNH BÁO KHẨN CẤP ĐẤT KHÔ</b>\n====================\n📍 <i>Device ID: ${document.getElementById('userInputId').value}</i>\n💦 Độ ẩm đất rơi xuống: <b>${data.soil}%</b>\n🌡 Nhiệt độ không khí: <b>${data.temp}°C</b>\n\n⚙️ Hệ thống đang tự động kích hoạt máy bơm nước cứu cây!`;
+          sendTelegramAlert(telegramMsg);
+        } else if (data.soil > 85.0) {
+          labelSoil.innerHTML = `<span class="text-sky-600 font-bold"><i class="fa-solid fa-droplet-percent"></i> Đất bão hòa nước.</span>`;
+        } else {
+          labelSoil.innerHTML = `<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-circle-check"></i> Độ ẩm đất lý tưởng.</span>`;
+        }
+
+        const isAuto = data.mode === 1;
+        updateUIForMode(isAuto);
+
+        const isPumpOn = data.pump === 1;
+        updateUIForPump(isPumpOn);
+
+        const timeNow = new Date().toLocaleTimeString();
+        chart.data.labels.push(timeNow);
+        chart.data.datasets[0].data.push(data.temp);
+        chart.data.datasets[1].data.push(data.hum);
+        chart.data.datasets[2].data.push(data.soil);
+
+        if (chart.data.labels.length > 15) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+          chart.data.datasets[1].data.shift();
+          chart.data.datasets[2].data.shift();
+        }
+        chart.update();
+
+      } catch (err) {
+        writeLog(`Lỗi xử lý chuỗi JSON: ${err.message}`, "warn");
+      }
+    }
+
+    function updateUIForMode(isAuto) {
+      const badge = document.getElementById('modeBadge');
+      const btnAuto = document.getElementById('btnAutoMode');
+      const btnManual = document.getElementById('btnManualMode');
+      const pumpToggle = document.getElementById('pumpToggle');
+      const modeWarnText = document.getElementById('modeWarnText');
+
+      if (isAuto) {
+        badge.innerText = "Tự Động";
+        badge.className = "text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 uppercase";
+        
+        btnAuto.className = "bg-emerald-600 text-white text-xs font-bold py-2.5 rounded-xl transition duration-150 shadow-md shadow-emerald-600/10";
+        btnManual.className = "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold py-2.5 rounded-xl transition duration-150";
+        
+        pumpToggle.disabled = true; 
+        modeWarnText.classList.remove('hidden');
+      } else {
+        badge.innerText = "Thủ Công";
+        badge.className = "text-xs font-bold px-2.5 py-1 rounded-lg bg-blue-100 text-blue-700 uppercase";
+        
+        btnAuto.className = "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold py-2.5 rounded-xl transition duration-150";
+        btnManual.className = "bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl transition duration-150 shadow-md shadow-blue-600/10";
+        
+        pumpToggle.disabled = false; 
+        modeWarnText.classList.add('hidden');
+      }
+    }
+
+    function updateUIForPump(isPumpOn) {
+      const toggle = document.getElementById('pumpToggle');
+      const iconContainer = document.getElementById('pumpIconContainer');
+      const icon = document.getElementById('pumpIcon');
+      const statusText = document.getElementById('pumpStatusText');
+
+      toggle.checked = isPumpOn;
+
+      if (isPumpOn) {
+        iconContainer.className = "bg-emerald-100 text-emerald-600 p-2 rounded-xl transition-all shadow-md shadow-emerald-500/10 animate-pulse";
+        icon.className = "fa-solid fa-shower text-lg";
+        statusText.innerText = "Đang tưới nước...";
+        statusText.className = "text-xs text-emerald-600 font-bold block";
+      } else {
+        iconContainer.className = "bg-slate-200 text-slate-600 p-2 rounded-xl transition-all";
+        icon.className = "fa-solid fa-faucet-drip text-lg";
+        statusText.innerText = "Đang tắt";
+        statusText.className = "text-xs text-slate-400 font-semibold block";
+      }
+    }
+
+    function setSystemMode(modeCommand) {
+      if (!mqttClient || !mqttClient.isConnected()) {
+        writeLog("Chưa kết nối Cloud MQTT! Không thể điều khiển.", "error");
+        return;
+      }
+      const message = new Paho.MQTT.Message(modeCommand);
+      message.destinationName = topicControl;
+      mqttClient.send(message);
+      writeLog(`[ĐIỀU KHIỂN] Đã gửi lệnh chế độ: ${modeCommand}`);
+    }
+
+    function togglePump(toggleCheckbox) {
+      if (!mqttClient || !mqttClient.isConnected()) {
+        writeLog("Chưa kết nối Cloud MQTT! Không thể điều khiển.", "error");
+        toggleCheckbox.checked = !toggleCheckbox.checked; 
+        return;
+      }
+
+      const isCommandOn = toggleCheckbox.checked;
+      const commandString = isCommandOn ? "PUMP_ON" : "PUMP_OFF";
+
+      const message = new Paho.MQTT.Message(commandString);
+      message.destinationName = topicControl;
+      mqttClient.send(message);
+      writeLog(`[ĐIỀU KHIỂN] Đã gửi lệnh: ${commandString}`);
+    }
+
+    function reconnectWithCredentials() {
+      writeLog("Đang áp dụng thông số đăng nhập mới...");
+      if (mqttClient && mqttClient.isConnected()) {
+        mqttClient.disconnect();
+      }
+      setTimeout(connectMQTT, 500);
+    }
+
+    window.onload = function() {
+      initChart();
+      checkNotificationPermissionOnLoad();
+      // Tự động kích hoạt kết nối nhanh khi tải trang do thông tin cấu hình đã được điền sẵn chính xác
+      setTimeout(connectMQTT, 800);
+    }
+  </script>
+</body>
+</html>
